@@ -373,7 +373,7 @@ def main():
         st.dataframe(styled_df, use_container_width=True, height=400)
     
     # Export functionality
-    if st.button("📥 Export Analysis Results"):
+    if st.button("Export Analysis Results"):
         csv = df.to_csv(index=False)
         st.download_button(
             label="Download CSV",
