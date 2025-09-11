@@ -1,411 +1,483 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from textblob import TextBlob
+# CommentSense — Streamlit end-to-end demo (free, no paid APIs)
+# -------------------------------------------------------------
+# Run: streamlit run app.py
+
 import re
 from collections import Counter
-import numpy as np
 from datetime import datetime
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-#TESTING 12 12
-# Set page config
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+# ---- AI libs
+from sentence_transformers import SentenceTransformer
+from transformers import pipeline
+from detoxify import Detoxify
+
+
+# =========================
+# Page + minimal styling
+# =========================
 st.set_page_config(
     page_title="CommentSense AI Analytics",
-    page_icon="CSAA",
+    page_icon="💬",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Custom CSS for better styling
-st.markdown("""
+st.markdown(
+    """
 <style>
-.main-header {
-    font-size: 3rem;
-    font-weight: bold;
-    color: #1f77b4;
-    text-align: center;
-    margin-bottom: 2rem;
-}
-.metric-card {
-    background-color: #f0f2f6;
-    padding: 1rem;
-    border-radius: 10px;
-    border-left: 5px solid #1f77b4;
-}
-.quality-high { color: #28a745; font-weight: bold; }
-.quality-medium { color: #ffc107; font-weight: bold; }
-.quality-low { color: #dc3545; font-weight: bold; }
+.main-header{font-size:2.2rem;font-weight:800;color:#1f77b4;text-align:center;margin:0.5rem 0 1.2rem}
+.metric-card{background:#f0f2f6;padding:1rem;border-radius:10px;border-left:5px solid #1f77b4}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
+
+# =========================
+# Cached model loaders
+# =========================
+@st.cache_resource
+def load_embedder():
+    # Multilingual alternative: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+
+@st.cache_resource
+def load_sentiment():
+    # Multilingual alternative: "nlptown/bert-base-multilingual-uncased-sentiment"
+    return pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
+
+
+@st.cache_resource
+def load_zero_shot():
+    # If memory tight, you can switch to "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+    return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+
+
+@st.cache_resource
+def load_toxicity():
+    try:
+        # First try loading the original model
+        return Detoxify("original")
+    except Exception as e:
+        st.warning("⚠️ Could not load toxicity model. Using simplified toxicity detection.")
+        # Fallback to a simple keyword-based approach
+        return SimpleToxicityDetector()
+
+
+# Add this class above the CommentAnalyzer class
+class SimpleToxicityDetector:
+    def __init__(self):
+        self.toxic_patterns = [
+            r'\b(hate|idiot|stupid|dumb|moron|fool)\b',
+            r'\b(fuck|shit|damn|crap|ass)\b',
+            r'\b(kill|die|death|murder)\b',
+            r'\b(racist|sexist|bigot)\b'
+        ]
+        
+    def predict(self, texts):
+        if isinstance(texts, str):
+            texts = [texts]
+            
+        scores = []
+        for text in texts:
+            text = text.lower()
+            # Count matches of toxic patterns
+            matches = sum(bool(re.search(pattern, text)) for pattern in self.toxic_patterns)
+            # Convert to a score between 0 and 1
+            score = min(1.0, matches / len(self.toxic_patterns))
+            scores.append(score)
+            
+        return {"toxicity": np.array(scores)}
+
+
+# =========================
+# Analyzer (AI + light rules)
+# =========================
 class CommentAnalyzer:
     def __init__(self):
-        # Define quality indicators
+        self.embedder = load_embedder()
+        self.sentiment_pipe = load_sentiment()
+        self.zs_pipe = load_zero_shot()
+        self.tox = load_toxicity()
+
+        # Lightweight bonuses/penalties (you can tweak)
         self.quality_keywords = {
-            'high_quality': [
-                'insightful', 'helpful', 'informative', 'detailed', 'thoughtful', 
-                'well-explained', 'comprehensive', 'valuable', 'educational', 'clear',
-                'professional', 'constructive', 'analytical', 'in-depth'
+            "high_quality": [
+                "insightful",
+                "helpful",
+                "informative",
+                "detailed",
+                "thoughtful",
+                "constructive",
+                "in-depth",
+                "compare",
+                "recommend",
+                "results",
+                "review",
             ],
-            'engagement_words': [
-                'question', 'why', 'how', 'what', 'when', 'where', 'discuss',
-                'thoughts', 'opinion', 'agree', 'disagree', 'interesting', 'curious'
+            "spam_indicators": [
+                "subscribe",
+                "check out",
+                "visit my",
+                "link in bio",
+                "click here",
+                "follow me",
+                "dm me",
+                "whatsapp",
+                "promo",
+                "discount",
+                "coupon",
             ],
-            'spam_indicators': [
-                'subscribe', 'check out', 'visit my', 'link in bio', 'click here',
-                'follow me', 'dm me', 'first', 'early', 'notification squad'
-            ]
         }
-        
-        # Category keywords for filtering
-        self.category_keywords = {
-            'skincare': ['skincare', 'acne', 'moisturizer', 'serum', 'cleanser', 'SPF', 'routine'],
-            'fragrance': ['perfume', 'cologne', 'scent', 'fragrance', 'smell', 'notes'],
-            'makeup': ['makeup', 'foundation', 'lipstick', 'eyeshadow', 'mascara', 'concealer'],
-            'tech': ['technology', 'software', 'hardware', 'app', 'device', 'digital'],
-            'gaming': ['game', 'gaming', 'player', 'console', 'PC', 'mobile gaming']
-        }
+        self.categories = ["skincare", "fragrance", "makeup", "hair", "other"]
 
-    def analyze_sentiment(self, comment):
-        """Analyze sentiment of a comment"""
+    # --- AI pieces ---
+    def analyze_sentiment(self, comment: str) -> str:
         try:
-            blob = TextBlob(str(comment))
-            sentiment = blob.sentiment.polarity
-            if sentiment > 0.1:
-                return 'Positive'
-            elif sentiment < -0.1:
-                return 'Negative'
-            else:
-                return 'Neutral'
-        except:
-            return 'Neutral'
+            out = self.sentiment_pipe(str(comment))[0]["label"].upper()
+            return {"NEGATIVE": "Negative", "NEUTRAL": "Neutral", "POSITIVE": "Positive"}.get(out, "Neutral")
+        except Exception:
+            return "Neutral"
 
-    def calculate_quality_score(self, comment):
-        """Calculate quality score based on multiple factors"""
-        if pd.isna(comment):
-            return 0
-        
-        comment_lower = str(comment).lower()
-        score = 0
-        
-        # Length factor (optimal range: 20-200 characters)
-        length = len(comment_lower)
-        if 20 <= length <= 200:
-            score += 2
-        elif length > 200:
-            score += 1
-        
-        # High quality keywords
-        for word in self.quality_keywords['high_quality']:
-            if word in comment_lower:
-                score += 2
-        
-        # Engagement indicators
-        for word in self.quality_keywords['engagement_words']:
-            if word in comment_lower:
-                score += 1
-        
-        # Proper grammar indicators
-        if '?' in comment or '!' in comment:
-            score += 1
-        
-        # Penalty for spam indicators
-        for spam_word in self.quality_keywords['spam_indicators']:
-            if spam_word in comment_lower:
-                score -= 3
-        
-        # Penalty for excessive caps or repetitive characters
-        if len(re.findall(r'[A-Z]', comment)) > len(comment) * 0.3:
-            score -= 2
-        
-        if re.search(r'(.)\1{2,}', comment):  # Repetitive characters
-            score -= 1
-        
-        return max(0, score)  # Ensure non-negative score
+    def detect_toxicity(self, comment: str) -> float:
+        try:
+            return float(self.tox.predict([str(comment)])["toxicity"][0])  # 0..1
+        except Exception as e:
+            st.warning(f"Toxicity detection error: {str(e)}")
+            return 0.0
 
-    def categorize_comment(self, comment):
-        """Categorize comment based on keywords"""
-        if pd.isna(comment):
-            return 'Uncategorized'
-        
-        comment_lower = str(comment).lower()
-        categories = []
-        
-        for category, keywords in self.category_keywords.items():
-            if any(keyword in comment_lower for keyword in keywords):
-                categories.append(category)
-        
-        return categories if categories else ['Uncategorized']
+    def zero_shot_categories(self, comment: str):
+        try:
+            out = self.zs_pipe(str(comment), candidate_labels=self.categories, multi_label=True)
+            labs = [l for l, s in zip(out["labels"], out["scores"]) if s >= 0.40]
+            return labs or ["other"]
+        except Exception:
+            return ["other"]
 
-    def detect_spam(self, comment):
-        """Detect if comment is likely spam"""
-        if pd.isna(comment):
-            return False
-        
-        comment_lower = str(comment).lower()
-        spam_count = sum(1 for spam_word in self.quality_keywords['spam_indicators'] 
-                        if spam_word in comment_lower)
-        
-        # Additional spam indicators
-        if len(comment_lower) < 5:  # Too short
-            return True
-        if spam_count >= 2:  # Multiple spam indicators
-            return True
-        if re.search(r'(.)\1{4,}', comment):  # Excessive repetition
-            return True
-        
-        return False
+    def relevance_to_post(self, comment: str, post_text: str) -> float:
+        if not isinstance(post_text, str) or not post_text.strip():
+            return 0.0
+        emb = self.embedder.encode([str(comment), str(post_text)], normalize_embeddings=True)
+        sim = float((emb[0] * emb[1]).sum())  # cosine (normalized)
+        return max(0.0, min(1.0, (sim + 1.0) / 2.0))  # map [-1,1] -> [0,1]
 
+    # --- Hybrid QualityScore (0..1) ---
+    def quality_score(self, comment: str, post_text: str) -> float:
+        if not isinstance(comment, str) or not comment.strip():
+            return 0.0
+        c = comment.lower()
+
+        rel = self.relevance_to_post(comment, post_text)  # 0..1
+        tox = self.detect_toxicity(comment)  # 0..1
+        sent = self.analyze_sentiment(comment)
+        sent_s = {"Positive": 1.0, "Neutral": 0.5, "Negative": 0.0}.get(sent, 0.5)
+
+        length_bonus = 0.15 if 30 <= len(c) <= 220 else (0.05 if len(c) > 220 else 0.0)
+        kw_bonus = 0.15 if any(k in c for k in self.quality_keywords["high_quality"]) else 0.0
+        spam_pen = 0.25 if any(s in c for s in self.quality_keywords["spam_indicators"]) else 0.0
+        caps_pen = 0.15 if len(re.findall(r"[A-Z]", comment)) > max(1, len(comment)) * 0.35 else 0.0
+        repeat_pen = 0.10 if re.search(r"(.)\1{4,}", comment) else 0.0
+
+        score = (0.45 * rel + 0.25 * sent_s + length_bonus + kw_bonus) - (0.35 * tox + spam_pen + caps_pen + repeat_pen)
+        return float(max(0.0, min(1.0, score)))
+
+
+# =========================
+# Sample data for demo
+# =========================
 def load_sample_data():
-    """Generate sample data for demonstration"""
     sample_comments = [
-        "This tutorial was incredibly helpful! The step-by-step breakdown made it so easy to follow.",
+        "This tutorial was incredibly helpful! The step-by-step breakdown made it easy to follow.",
         "Great video! Could you do one about advanced techniques?",
         "First! Love your content!",
-        "This is amazing, really detailed explanation. Thank you!",
+        "Really detailed explanation. Thank you!",
         "Subscribe to my channel for more content like this!",
         "I disagree with your approach, but I appreciate the thorough analysis.",
         "Wow!!! So good!!!",
-        "Very informative video. The examples you provided were particularly useful for understanding the concept.",
-        "Can you please make a video about skincare routine for sensitive skin?",
+        "Very informative. The examples were particularly useful.",
+        "Can you do skincare routine for sensitive skin?",
         "Check out my latest video! Link in bio!",
         "This fragrance sounds interesting. What are the main notes?",
-        "Your makeup tutorial always inspire me to try new looks.",
+        "Your makeup tutorial inspired me to try new looks.",
         "The gaming review was spot on. Have you tried the new update?",
-        "Thanks for the tech review. Very comprehensive analysis.",
-        "aaaaaaaaawesome video!!!!"
+        "Thanks for the tech review. Very comprehensive.",
+        "aaaaaaaaawesome video!!!!",
     ]
-    
-    video_ids = ['VID001', 'VID002', 'VID003', 'VID001', 'VID002', 'VID003', 'VID001', 'VID002', 'VID003', 'VID001', 'VID002', 'VID003', 'VID001', 'VID002', 'VID003']
-    
-    return pd.DataFrame({
-        'video_id': video_ids,
-        'comment': sample_comments,
-        'likes': np.random.randint(0, 50, len(sample_comments)),
-        'timestamp': pd.date_range('2024-01-01', periods=len(sample_comments), freq='H')
-    })
+    video_ids = ["VID001", "VID002", "VID003"] * 5
+    titles = {
+        "VID001": "Hydrating Serum 101",
+        "VID002": "Summer Fragrance Picks",
+        "VID003": "Everyday Makeup Tips",
+    }
+    df = pd.DataFrame(
+        {
+            "video_id": video_ids[: len(sample_comments)],
+            "comment": sample_comments,
+            "likes": np.random.randint(0, 50, len(sample_comments)),
+            "shares": np.random.randint(0, 10, len(sample_comments)),
+            "saves": np.random.randint(0, 10, len(sample_comments)),
+            "timestamp": pd.date_range("2024-01-01", periods=len(sample_comments), freq="H"),
+        }
+    )
+    df["title"] = df["video_id"].map(titles)
+    return df
 
+
+# =========================
+# App
+# =========================
 def main():
-    st.markdown('<h1 class="main-header">CommentSense AI Analytics</h1>', unsafe_allow_html=True)
-    st.markdown("### AI-Powered Comment Quality Analysis & Share of Engagement Metrics")
-    
-    # Initialize analyzer
+    st.markdown('<div class="main-header">CommentSense — Quality Engagement Analytics</div>', unsafe_allow_html=True)
+    st.markdown("AI-powered analysis of **relevance, sentiment, toxicity, spam** and a **quality-weighted SoE** metric.")
+
     analyzer = CommentAnalyzer()
-    
-    # Sidebar
-    st.sidebar.title("Dashboard Controls")
-    
-    # File upload
-    uploaded_file = st.sidebar.file_uploader("Upload Comment Dataset", type=['csv', 'xlsx'])
-    
+
+    # ---------- Sidebar: data upload ----------
+    st.sidebar.title("Data")
+    uploaded_file = st.sidebar.file_uploader("Upload comments CSV/XLSX", type=["csv", "xlsx"])
     if uploaded_file is not None:
         try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
+            df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
         except Exception as e:
             st.error(f"Error loading file: {e}")
             df = load_sample_data()
     else:
-        st.info("No file uploaded. Using sample data for demonstration.")
+        st.info("No file uploaded. Using sample data for demo.")
         df = load_sample_data()
-    
-    # Data preprocessing
-    if 'comment' not in df.columns:
-        st.error("Dataset must contain a 'comment' column")
-        return
-    
-    # Analyze comments
-    with st.spinner("AI is analyzing comments..."):
-        df['sentiment'] = df['comment'].apply(analyzer.analyze_sentiment)
-        df['quality_score'] = df['comment'].apply(analyzer.calculate_quality_score)
-        df['is_spam'] = df['comment'].apply(analyzer.detect_spam)
-        df['categories'] = df['comment'].apply(analyzer.categorize_comment)
-        
-        # Quality classification
-        def classify_quality(score):
-            if score >= 4:
-                return 'High'
-            elif score >= 2:
-                return 'Medium'
-            else:
-                return 'Low'
-        
-        df['quality_category'] = df['quality_score'].apply(classify_quality)
-    
-    # Sidebar filters
-    st.sidebar.subheader("Filters")
-    
-    if 'video_id' in df.columns:
-        selected_videos = st.sidebar.multiselect("Select Video IDs", 
-                                                options=df['video_id'].unique(),
-                                                default=df['video_id'].unique())
-        df = df[df['video_id'].isin(selected_videos)]
-    
-    quality_filter = st.sidebar.multiselect("Quality Level", 
-                                           options=['High', 'Medium', 'Low'],
-                                           default=['High', 'Medium', 'Low'])
-    df_filtered = df[df['quality_category'].isin(quality_filter)]
-    
-    # Main dashboard
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_comments = len(df_filtered)
-        st.metric("Total Comments", total_comments)
-    
-    with col2:
-        quality_ratio = len(df_filtered[df_filtered['quality_category'] == 'High']) / len(df_filtered) * 100
-        st.metric("Quality Comments %", f"{quality_ratio:.1f}%")
-    
-    with col3:
-        spam_ratio = len(df_filtered[df_filtered['is_spam'] == True]) / len(df_filtered) * 100
-        st.metric("Spam Comments %", f"{spam_ratio:.1f}%")
-    
-    with col4:
-        avg_quality_score = df_filtered['quality_score'].mean()
-        st.metric("Avg Quality Score", f"{avg_quality_score:.1f}")
-    
-    # Charts section
-    st.subheader("Analytics Dashboard")
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["Quality Analysis", "Sentiment Analysis", "Category Breakdown", "Spam Detection"])
-    
-    with tab1:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Quality distribution
-            quality_counts = df_filtered['quality_category'].value_counts()
-            fig_quality = px.pie(values=quality_counts.values, 
-                               names=quality_counts.index,
-                               title="Comment Quality Distribution",
-                               color_discrete_map={'High': '#28a745', 'Medium': '#ffc107', 'Low': '#dc3545'})
-            st.plotly_chart(fig_quality, use_container_width=True)
-        
-        with col2:
-            # Quality by video
-            if 'video_id' in df_filtered.columns:
-                quality_by_video = df_filtered.groupby(['video_id', 'quality_category']).size().unstack(fill_value=0)
-                fig_video_quality = px.bar(quality_by_video, 
-                                         title="Quality Distribution by Video",
-                                         color_discrete_map={'High': '#28a745', 'Medium': '#ffc107', 'Low': '#dc3545'})
-                st.plotly_chart(fig_video_quality, use_container_width=True)
-    
-    with tab2:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Sentiment distribution
-            sentiment_counts = df_filtered['sentiment'].value_counts()
-            fig_sentiment = px.bar(x=sentiment_counts.index, 
-                                 y=sentiment_counts.values,
-                                 title="Sentiment Distribution",
-                                 color=sentiment_counts.index,
-                                 color_discrete_map={'Positive': '#28a745', 'Neutral': '#6c757d', 'Negative': '#dc3545'})
-            st.plotly_chart(fig_sentiment, use_container_width=True)
-        
-        with col2:
-            # Sentiment vs Quality
-            if len(df_filtered) > 0:
-                fig_sentiment_quality = px.box(df_filtered, 
-                                             x='sentiment', 
-                                             y='quality_score',
-                                             title="Quality Score by Sentiment")
-                st.plotly_chart(fig_sentiment_quality, use_container_width=True)
-    
-    with tab3:
-        # Category analysis
-        all_categories = []
-        for cat_list in df_filtered['categories']:
-            all_categories.extend(cat_list)
-        
-        if all_categories:
-            category_counts = Counter(all_categories)
-            fig_categories = px.bar(x=list(category_counts.keys()), 
-                                  y=list(category_counts.values()),
-                                  title="Comment Categories Distribution")
-            st.plotly_chart(fig_categories, use_container_width=True)
-        else:
-            st.info("No categories found in the filtered data.")
-    
-    with tab4:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Spam detection results
-            spam_counts = df_filtered['is_spam'].value_counts()
-            fig_spam = px.pie(values=spam_counts.values,
-                            names=['Clean Comments' if not x else 'Spam Comments' for x in spam_counts.index],
-                            title="Spam Detection Results",
-                            color_discrete_map={'Clean Comments': '#28a745', 'Spam Comments': '#dc3545'})
-            st.plotly_chart(fig_spam, use_container_width=True)
-        
-        with col2:
-            # Quality vs Spam
-            spam_quality = df_filtered.groupby(['is_spam', 'quality_category']).size().unstack(fill_value=0)
-            fig_spam_quality = px.bar(spam_quality, 
-                                    title="Quality Distribution: Spam vs Clean Comments",
-                                    color_discrete_map={'High': '#28a745', 'Medium': '#ffc107', 'Low': '#dc3545'})
-            st.plotly_chart(fig_spam_quality, use_container_width=True)
-    
-    # Detailed view
-    st.subheader("Detailed Comment Analysis")
-    
-    # Show sample comments with analysis
-    if st.checkbox("Show Detailed Comment Analysis"):
-        display_df = df_filtered[['comment', 'quality_score', 'quality_category', 'sentiment', 'is_spam']].copy()
-        
-        # Apply styling based on quality
-        def style_quality(val):
-            if val == 'High':
-                return 'background-color: #d4edda; color: #155724'
-            elif val == 'Medium':
-                return 'background-color: #fff3cd; color: #856404'
-            else:
-                return 'background-color: #f8d7da; color: #721c24'
-        
-        styled_df = display_df.style.applymap(style_quality, subset=['quality_category'])
-        st.dataframe(styled_df, use_container_width=True, height=400)
-    
-    # Export functionality
-    if st.button("Export Analysis Results"):
-        csv = df.to_csv(index=False)
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name=f"comment_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
-        )
-    
-    # Insights and recommendations
-    st.subheader("AI Insights & Recommendations")
-    
-    insights = []
-    
-    # Quality insights
-    high_quality_pct = len(df_filtered[df_filtered['quality_category'] == 'High']) / len(df_filtered) * 100
-    if high_quality_pct > 30:
-        insights.append("Great engagement! High percentage of quality comments indicates strong audience connection.")
-    elif high_quality_pct < 15:
-        insights.append("Consider improving content to encourage more meaningful discussions.")
-    
-    # Spam insights
-    spam_pct = len(df_filtered[df_filtered['is_spam'] == True]) / len(df_filtered) * 100
-    if spam_pct > 20:
-        insights.append("High spam rate detected. Consider implementing stricter moderation.")
-    
-    # Sentiment insights
-    positive_pct = len(df_filtered[df_filtered['sentiment'] == 'Positive']) / len(df_filtered) * 100
-    if positive_pct > 60:
-        insights.append("Positive audience sentiment! Your content resonates well with viewers.")
-    
-    for insight in insights:
-        st.info(insight)
 
+    # Ensure required column
+    if "comment" not in df.columns:
+        st.error("Dataset must contain a 'comment' column.")
+        st.stop()
+
+    # pick a post_text column for relevance
+    post_text_col = None
+    for c in ["caption", "title", "video_caption", "post_text", "text"]:
+        if c in df.columns:
+            post_text_col = c
+            break
+    if post_text_col is None:
+        # Create default post_text column more safely
+        if "video_id" in df.columns:
+            df[post_text_col := "post_text"] = df["video_id"].astype(str)
+        else:
+            df[post_text_col := "post_text"] = ""  # Empty string as fallback
+
+    # ---------- AI analysis ----------
+    with st.spinner("Analyzing with free AI models…"):
+        df["sentiment"] = df["comment"].apply(analyzer.analyze_sentiment)
+        df["toxicity"] = df["comment"].apply(analyzer.detect_toxicity)
+        df["relevance"] = df.apply(lambda r: analyzer.relevance_to_post(r["comment"], r[post_text_col]), axis=1)
+
+        # Only run zero-shot on likely on-topic to save RAM/time
+        def cats_or_other(row):
+            return analyzer.zero_shot_categories(row["comment"]) if row["relevance"] >= 0.40 else ["other"]
+
+        df["categories"] = df.apply(cats_or_other, axis=1)
+        df["quality_score"] = df.apply(lambda r: analyzer.quality_score(r["comment"], r[post_text_col]), axis=1)
+
+        # Labels
+        df["quality_category"] = pd.cut(df["quality_score"], bins=[-1, 0.4, 0.7, 1.0], labels=["Low", "Medium", "High"])
+        df["is_spam"] = (df["quality_score"] < 0.25) | (df["toxicity"] > 0.6)
+
+    # ---------- Filters ----------
+    st.sidebar.subheader("Filters")
+    if "video_id" in df.columns:
+        vids = st.sidebar.multiselect("Video IDs", df["video_id"].unique().tolist(), default=df["video_id"].unique().tolist())
+        df = df[df["video_id"].isin(vids)]
+    quality_sel = st.sidebar.multiselect("Quality", ["High", "Medium", "Low"], default=["High", "Medium", "Low"])
+    df_filtered = df[df["quality_category"].isin(quality_sel)]
+
+    # ---------- KPI row ----------
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Total Comments", len(df_filtered))
+    with c2:
+        qcr = (df_filtered["quality_category"] == "High").mean() * 100 if len(df_filtered) else 0
+        st.metric("QCR (Quality %)", f"{qcr:.1f}%")
+    with c3:
+        spam = (df_filtered["is_spam"]).mean() * 100 if len(df_filtered) else 0
+        st.metric("Spam %", f"{spam:.1f}%")
+    with c4:
+        st.metric("Avg QualityScore", f"{df_filtered['quality_score'].mean():.2f}" if len(df_filtered) else "0.00")
+
+    # ---------- Charts ----------
+    st.subheader("Analytics")
+    tab1, tab2, tab3, tab4 = st.tabs(["Quality", "Sentiment", "Categories", "Spam"])
+
+    with tab1:
+        colA, colB = st.columns(2)
+        with colA:
+            vc = df_filtered["quality_category"].value_counts()
+            fig = px.pie(values=vc.values, names=vc.index, title="Quality distribution")
+            st.plotly_chart(fig, use_container_width=True)
+        with colB:
+            if "video_id" in df_filtered.columns:
+                g = df_filtered.groupby(["video_id", "quality_category"]).size().unstack(fill_value=0)
+                fig2 = px.bar(g, title="Quality by video")
+                st.plotly_chart(fig2, use_container_width=True)
+
+    with tab2:
+        colA, colB = st.columns(2)
+        with colA:
+            sc = df_filtered["sentiment"].value_counts()
+            fig = px.bar(x=sc.index, y=sc.values, title="Sentiment distribution", labels={"x": "Sentiment", "y": "Count"})
+            st.plotly_chart(fig, use_container_width=True)
+        with colB:
+            if len(df_filtered):
+                fig = px.box(df_filtered, x="sentiment", y="quality_score", title="QualityScore by sentiment")
+                st.plotly_chart(fig, use_container_width=True)
+
+    with tab3:
+        all_cats = []
+        for L in df_filtered["categories"]:
+            all_cats.extend(L)
+        if all_cats:
+            counts = Counter(all_cats)
+            fig = px.bar(x=list(counts.keys()), y=list(counts.values()), title="Category counts")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No categories detected in current filter.")
+
+    with tab4:
+        colA, colB = st.columns(2)
+        with colA:
+            spam_counts = df_filtered["is_spam"].value_counts()
+            names = ["Clean" if not k else "Spam" for k in spam_counts.index]
+            fig = px.pie(values=spam_counts.values, names=names, title="Spam vs Clean")
+            st.plotly_chart(fig, use_container_width=True)
+        with colB:
+            g = df_filtered.groupby(["is_spam", "quality_category"]).size().unstack(fill_value=0)
+            fig = px.bar(g, title="Quality by Spam/Clean")
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ---------- Detailed table ----------
+    st.subheader("Detailed Comment Analysis")
+    if st.checkbox("Show table"):
+        show_cols = ["comment", "quality_score", "quality_category", "sentiment", "toxicity", "relevance", "categories", "is_spam"]
+        missing = [c for c in show_cols if c not in df_filtered.columns]
+        for m in missing:
+            df_filtered[m] = np.nan
+        st.dataframe(df_filtered[show_cols].reset_index(drop=True), use_container_width=True, height=400)
+
+    # ---------- Export ----------
+    colDL, _ = st.columns([1, 3])
+    with colDL:
+        if st.button("Prepare CSV"):
+            st.session_state._csv = df.to_csv(index=False)
+        if "_csv" in st.session_state:
+            st.download_button(
+                "Download analysis CSV",
+                data=st.session_state._csv,
+                file_name=f"comment_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+            )
+
+    # ---------- Insights ----------
+    st.subheader("AI Insights & Recommendations")
+    insights = []
+    if len(df_filtered):
+        if qcr > 30:
+            insights.append("High QCR — your content is sparking meaningful, on-topic discussion.")
+        elif qcr < 15:
+            insights.append("Low QCR — try clearer CTAs or more specific captions to prompt constructive replies.")
+
+        if spam > 20:
+            insights.append("Spam is elevated — many short/promo/duplicate comments. Consider moderation rules or blocking promo keywords.")
+
+        pos = (df_filtered["sentiment"] == "Positive").mean() * 100
+        if pos > 60:
+            insights.append("Audience sentiment is strongly positive — consider scaling this content theme.")
+    for tip in insights:
+        st.info(tip)
+
+    # ---------- Chat assistant (dataset-aware) ----------
+    st.divider()
+    st.subheader("Chat with CommentSense")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": "Hi! Ask me things like: **what is QCR**, **show top posts**, **find skincare positive examples**, or **why is spam high**.",
+            }
+        ]
+
+    # render history
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    def chat_reply(prompt: str) -> str:
+        p = prompt.lower().strip()
+
+        if "qcr" in p or ("quality" in p and "ratio" in p):
+            cur_qcr = (df["quality_category"] == "High").mean() * 100 if len(df) else 0
+            return f"**QCR** is the share of quality comments (High). Current QCR = **{cur_qcr:.1f}%**. We rate quality via relevance (MiniLM), sentiment, length/specificity bonuses, and toxicity/spam penalties."
+
+        if "top" in p and ("post" in p or "video" in p):
+            cols = [c for c in ["likes", "shares", "saves"] if c in df.columns]
+            if cols:
+                z = (df[cols] - df[cols].mean()) / df[cols].std(ddof=0)
+                df["_soe"] = z.mean(axis=1)
+            else:
+                df["_soe"] = 0.0
+            df["_qsoe"] = df["_soe"] * df["quality_score"]
+            if "video_id" in df.columns:
+                top = df.groupby("video_id")["_qsoe"].mean().sort_values(ascending=False).head(5)
+                st.dataframe(top.rename("Q-SoE").reset_index(), use_container_width=True)
+                return "Top posts by **Q-SoE** shown above."
+            return "I computed Q-SoE, but couldn't find a 'video_id' to group by."
+
+        if "find" in p or "example" in p:
+            want_cat = None
+            for c in ["skincare", "fragrance", "makeup", "hair", "other"]:
+                if c in p:
+                    want_cat = c
+                    break
+            want_sent = None
+            for s in ["positive", "neutral", "negative"]:
+                if s in p:
+                    want_sent = s.capitalize()
+                    break
+            q = df.copy()
+            if want_cat:
+                q = q[q["categories"].apply(lambda L: want_cat in L)]
+            if want_sent:
+                q = q[q["sentiment"] == want_sent]
+            q = q.sort_values("quality_score", ascending=False).head(5)
+            if len(q):
+                st.dataframe(q[["comment", "quality_score", "sentiment", "categories"]].reset_index(drop=True), use_container_width=True)
+                return f"Showing **{len(q)}** examples{f' in {want_cat}' if want_cat else ''}{f' with {want_sent} sentiment' if want_sent else ''}."
+            return "No examples matched your request."
+
+        if "spam" in p and ("why" in p or "high" in p):
+            spam_rate = (df["is_spam"]).mean() * 100 if len(df) else 0
+            tips = "- Many short/duplicate or promo-keyword comments\n- Toxic language\n- Off-topic replies"
+            return f"Spam is **{spam_rate:.1f}%**. We flag spam via low QualityScore, promo keywords, and toxicity.\n\n**Reduce it by:**\n{tips}"
+
+        if "help" in p or "what can you do" in p:
+            return "I can explain **QCR/Q-SoE**, rank **top posts**, and surface **example comments** filtered by category or sentiment."
+
+        return "Try: **show top posts**, **find skincare positive examples**, or **what is QCR**."
+
+    if user_prompt := st.chat_input("Ask about QCR, top posts, examples…"):
+        st.session_state.messages.append({"role": "user", "content": user_prompt})
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+
+        reply = chat_reply(user_prompt)
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+
+
+# ---- run
 if __name__ == "__main__":
     main()

@@ -1,7 +1,11 @@
 streamlit
 pandas
-plotly
-textblob
 numpy
-seaborn
-matplotlib
+scikit-learn
+torch
+transformers
+sentence-transformers
+langdetect
+yake
+detoxify
+plotly
