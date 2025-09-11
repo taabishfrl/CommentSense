@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 # Set page config
 st.set_page_config(
     page_title="CommentSense AI Analytics",
-    page_icon="💬",
+    page_icon="CSAA",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -189,14 +189,14 @@ def load_sample_data():
     })
 
 def main():
-    st.markdown('<h1 class="main-header">💬 CommentSense AI Analytics</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">CommentSense AI Analytics</h1>', unsafe_allow_html=True)
     st.markdown("### AI-Powered Comment Quality Analysis & Share of Engagement Metrics")
     
     # Initialize analyzer
     analyzer = CommentAnalyzer()
     
     # Sidebar
-    st.sidebar.title("📊 Dashboard Controls")
+    st.sidebar.title("Dashboard Controls")
     
     # File upload
     uploaded_file = st.sidebar.file_uploader("Upload Comment Dataset", type=['csv', 'xlsx'])
@@ -211,7 +211,7 @@ def main():
             st.error(f"Error loading file: {e}")
             df = load_sample_data()
     else:
-        st.info("📝 No file uploaded. Using sample data for demonstration.")
+        st.info("No file uploaded. Using sample data for demonstration.")
         df = load_sample_data()
     
     # Data preprocessing
@@ -220,7 +220,7 @@ def main():
         return
     
     # Analyze comments
-    with st.spinner("🤖 AI is analyzing comments..."):
+    with st.spinner("AI is analyzing comments..."):
         df['sentiment'] = df['comment'].apply(analyzer.analyze_sentiment)
         df['quality_score'] = df['comment'].apply(analyzer.calculate_quality_score)
         df['is_spam'] = df['comment'].apply(analyzer.detect_spam)
@@ -238,7 +238,7 @@ def main():
         df['quality_category'] = df['quality_score'].apply(classify_quality)
     
     # Sidebar filters
-    st.sidebar.subheader("🔍 Filters")
+    st.sidebar.subheader("Filters")
     
     if 'video_id' in df.columns:
         selected_videos = st.sidebar.multiselect("Select Video IDs", 
@@ -271,7 +271,7 @@ def main():
         st.metric("Avg Quality Score", f"{avg_quality_score:.1f}")
     
     # Charts section
-    st.subheader("📈 Analytics Dashboard")
+    st.subheader("Analytics Dashboard")
     
     tab1, tab2, tab3, tab4 = st.tabs(["Quality Analysis", "Sentiment Analysis", "Category Breakdown", "Spam Detection"])
     
@@ -354,7 +354,7 @@ def main():
             st.plotly_chart(fig_spam_quality, use_container_width=True)
     
     # Detailed view
-    st.subheader("🔍 Detailed Comment Analysis")
+    st.subheader("Detailed Comment Analysis")
     
     # Show sample comments with analysis
     if st.checkbox("Show Detailed Comment Analysis"):
@@ -383,26 +383,26 @@ def main():
         )
     
     # Insights and recommendations
-    st.subheader("💡 AI Insights & Recommendations")
+    st.subheader("AI Insights & Recommendations")
     
     insights = []
     
     # Quality insights
     high_quality_pct = len(df_filtered[df_filtered['quality_category'] == 'High']) / len(df_filtered) * 100
     if high_quality_pct > 30:
-        insights.append("✅ Great engagement! High percentage of quality comments indicates strong audience connection.")
+        insights.append("Great engagement! High percentage of quality comments indicates strong audience connection.")
     elif high_quality_pct < 15:
-        insights.append("⚠️ Consider improving content to encourage more meaningful discussions.")
+        insights.append("Consider improving content to encourage more meaningful discussions.")
     
     # Spam insights
     spam_pct = len(df_filtered[df_filtered['is_spam'] == True]) / len(df_filtered) * 100
     if spam_pct > 20:
-        insights.append("🚨 High spam rate detected. Consider implementing stricter moderation.")
+        insights.append("High spam rate detected. Consider implementing stricter moderation.")
     
     # Sentiment insights
     positive_pct = len(df_filtered[df_filtered['sentiment'] == 'Positive']) / len(df_filtered) * 100
     if positive_pct > 60:
-        insights.append("😊 Positive audience sentiment! Your content resonates well with viewers.")
+        insights.append("Positive audience sentiment! Your content resonates well with viewers.")
     
     for insight in insights:
         st.info(insight)
