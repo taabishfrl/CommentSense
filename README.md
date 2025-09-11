@@ -52,3 +52,34 @@ Social Media Managers: Monitor comment quality across multiple videos/posts
 Brand Managers: Analyze customer sentiment and feedback quality
 Community Moderators: Identify spam and low-quality content for efficient moderation
 Marketing Teams: Measure content effectiveness through engagement quality metrics
+
+## Project Structure
+```
+my-streamlit-app
+├── src
+│   ├── app.py
+│   ├── components
+│   │   ├── __init__.py
+│   │   ├── analytics.py
+│   │   ├── charts.py
+│   │   ├── filters.py
+│   │   └── metrics.py
+│   ├── config
+│   │   ├── __init__.py
+│   │   ├── settings.py
+│   │   └── theme.py
+│   ├── services
+│   │   ├── __init__.py
+│   │   ├── analyzer.py
+│   │   └── data_loader.py
+│   ├── styles
+│   │   ├── __init__.py
+│   │   └── custom.css
+│   └── utils
+│       ├── __init__.py
+│       └── helpers.py
+├── tests
+│   └── __init__.py
+├── .gitignore
+├── requirements.txt
+└── README.md

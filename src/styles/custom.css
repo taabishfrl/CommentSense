@@ -1,0 +1,55 @@
+/* Custom styles for the Streamlit application inspired by L'Oreal Paris theme */
+
+body {
+    background-color: white;
+    color: black;
+    font-family: Arial, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: black;
+}
+
+.metric-card {
+    background-color: #f0f2f6;
+    border-radius: 10px;
+    border-left: 5px solid red;
+    padding: 1rem;
+}
+
+.button {
+    background-color: red;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    cursor: pointer;
+}
+
+.button:hover {
+    background-color: darkred;
+}
+
+.sidebar {
+    background-color: #f0f2f6;
+    padding: 20px;
+    border-radius: 10px;
+}
+
+.sidebar .stButton {
+    margin-top: 10px;
+}
+
+.stMetric {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.stTab {
+    background-color: white;
+    border: 1px solid #e0e0e0;
+}
+
+.stTab:hover {
+    border-color: red;
+}
