@@ -36,7 +36,7 @@ LOGO_URI = logo_data_uri()
 # =========================
 st.set_page_config(
     page_title="CommentSense AI Analytics",
-    page_icon="🚀",
+    page_icon="assets/mini.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -87,7 +87,7 @@ st.markdown(f"""
 /* Header styling */
 [data-testid="stHeader"] {{
     position: relative;
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: white !important;
     backdrop-filter: blur(20px) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
     height: 72px;
@@ -107,8 +107,10 @@ st.markdown(f"""
     background-size: contain;
     z-index: 5;
     pointer-events: none;
-    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
-    animation: logoGlow 3s ease-in-out infinite alternate;
+}}
+
+[data-testid="stSidebarContent"] {{
+    background: white;   
 }}
 
 @keyframes logoGlow {{
@@ -116,16 +118,9 @@ st.markdown(f"""
     to {{ filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.8)); }}
 }}
 
-/* Glassmorphism sidebar */
-.css-1d391kg {{
-    background: rgba(255, 255, 255, 0.1) !important;
-    backdrop-filter: blur(20px) !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
-    border-radius: 0 20px 20px 0 !important;
-}}
-
 /* Main content with glassmorphism */
 .block-container {{
+    width: 60%;
     background: rgba(255, 255, 255, 0.1) !important;
     backdrop-filter: blur(15px) !important;
     border-radius: 20px !important;
@@ -151,6 +146,11 @@ st.markdown(f"""
 .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{
     color: white !important;
     text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
+    font-weight: 600 !important;
+}}
+
+.stMarkdown h4 {{
+    color: black !important;
     font-weight: 600 !important;
 }}
 
@@ -288,7 +288,7 @@ st.markdown(f"""
 
 /* Sidebar enhancements */
 .sidebar .sidebar-content {{
-    background: rgba(255, 255, 255, 0.05) !important;
+    background: rgba(255, 255, 255, 0.05);
 }}
 
 .sidebar .element-container {{
@@ -546,7 +546,7 @@ def main():
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0;">
         <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">
-            🚀 CommentSense AI Analytics
+            CommentSense AI Analytics
         </h1>
         <p style="font-size: 1.2rem; opacity: 0.9; animation: fadeIn 2s ease-in;">
             AI-powered analysis of <strong>relevance, sentiment, toxicity, spam</strong> and a <strong>quality-weighted SoE</strong> metric.
@@ -557,7 +557,7 @@ def main():
     analyzer = CommentAnalyzer()
 
     # ---------- Enhanced Sidebar ----------
-    st.sidebar.markdown("### 📊 Data Management")
+    st.sidebar.markdown("#### Data Management")
     uploaded_file = st.sidebar.file_uploader(
         "Upload comments CSV/XLSX", 
         type=["csv", "xlsx"],
@@ -567,17 +567,17 @@ def main():
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
-            st.sidebar.success("✅ File uploaded successfully!")
+            st.sidebar.success("File uploaded successfully!")
         except Exception as e:
-            st.sidebar.error(f"❌ Error loading file: {e}")
+            st.sidebar.error(f"Error loading file: {e}")
             df = load_sample_data()
     else:
-        st.sidebar.info("💡 No file uploaded. Using sample data for demo.")
+        st.sidebar.info("No file uploaded. Using sample data for demo.")
         df = load_sample_data()
 
     # Ensure required column
     if "comment" not in df.columns:
-        st.error("❌ Dataset must contain a 'comment' column.")
+        st.error("Dataset must contain a 'comment' column.")
         st.stop()
 
     # Pick post_text column
@@ -595,23 +595,23 @@ def main():
     # ---------- AI Analysis with enhanced progress ----------
     progress_container = st.empty()
     with progress_container.container():
-        st.markdown("### 🤖 AI Analysis in Progress...")
+        st.markdown("### AI Analysis in Progress...")
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        status_text.text("🔍 Analyzing sentiment...")
+        status_text.text("Analyzing sentiment...")
         df["sentiment"] = df["comment"].apply(analyzer.analyze_sentiment)
         progress_bar.progress(25)
         
-        status_text.text("🛡️ Detecting toxicity...")
+        status_text.text("Detecting toxicity...")
         df["toxicity"] = df["comment"].apply(analyzer.detect_toxicity)
         progress_bar.progress(50)
         
-        status_text.text("📊 Calculating relevance...")
+        status_text.text("Calculating relevance...")
         df["relevance"] = df.apply(lambda r: analyzer.relevance_to_post(r["comment"], r[post_text_col]), axis=1)
         progress_bar.progress(75)
         
-        status_text.text("🏷️ Categorizing content...")
+        status_text.text("Categorizing content...")
         def cats_or_other(row):
             return analyzer.zero_shot_categories(row["comment"]) if row["relevance"] >= 0.40 else ["other"]
         df["categories"] = df.apply(cats_or_other, axis=1)
@@ -628,7 +628,7 @@ def main():
     df["is_spam"] = (df["quality_score"] < 0.25) | (df["toxicity"] > 0.6)
 
     # ---------- Enhanced Filters ----------
-    st.sidebar.markdown("### 🔽 Filters")
+    st.sidebar.markdown("#### Filters")
     if "video_id" in df.columns:
         vids = st.sidebar.multiselect(
             "📹 Video IDs", 
@@ -645,7 +645,7 @@ def main():
     df_filtered = df[df["quality_category"].isin(quality_sel)]
 
     # ---------- Enhanced KPI Row with animations ----------
-    st.markdown("### 📈 Key Performance Indicators")
+    st.markdown("### Key Performance Indicators")
     c1, c2, c3, c4 = st.columns(4)
     
     with c1:
@@ -662,7 +662,7 @@ def main():
         st.metric("⚡ Avg Quality Score", f"{avg_quality:.2f}", delta=f"{avg_quality-0.5:.2f}" if avg_quality > 0.5 else None)
 
     # ---------- Enhanced Charts ----------
-    st.markdown("### 📊 Analytics Dashboard")
+    st.markdown("### Analytics Dashboard")
     tab1, tab2, tab3, tab4 = st.tabs(["🎯 Quality", "😊 Sentiment", "🏷️ Categories", "🚫 Spam"])
 
     with tab1:
@@ -712,8 +712,8 @@ def main():
             st.plotly_chart(style_plotly_chart(fig), use_container_width=True)
 
     # ---------- Enhanced Detailed Table ----------
-    st.markdown("### 📋 Detailed Comment Analysis")
-    with st.expander("🔍 View Detailed Data Table", expanded=False):
+    st.markdown("### Detailed Comment Analysis")
+    with st.expander("View Detailed Data Table", expanded=False):
         show_cols = ["comment", "quality_score", "quality_category", "sentiment", "toxicity", "relevance", "categories", "is_spam"]
         missing = [c for c in show_cols if c not in df_filtered.columns]
         for m in missing:
@@ -751,16 +751,16 @@ def main():
         )
 
     # ---------- Enhanced Export ----------
-    st.markdown("### 📥 Export Results")
+    st.markdown("### Export Results")
     colDL, colInfo = st.columns([1, 2])
     with colDL:
-        if st.button("🔄 Prepare CSV Download", type="primary"):
+        if st.button("Prepare CSV Download", type="primary"):
             st.session_state._csv = df.to_csv(index=False)
-            st.success("✅ CSV prepared successfully!")
+            st.success("CSV prepared successfully!")
         
         if "_csv" in st.session_state:
             st.download_button(
-                "📊 Download Analysis CSV",
+                "Download Analysis CSV",
                 data=st.session_state._csv,
                 file_name=f"comment_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
@@ -768,10 +768,10 @@ def main():
             )
     
     with colInfo:
-        st.info("💡 **Export includes:** All original data plus AI analysis results (sentiment, toxicity, relevance, categories, quality scores)")
+        st.info(" **Export includes:** All original data plus AI analysis results (sentiment, toxicity, relevance, categories, quality scores)")
 
     # ---------- Enhanced Insights ----------
-    st.markdown("### 💡 AI-Generated Insights & Recommendations")
+    st.markdown("### AI-Generated Insights & Recommendations")
     insights = []
     if len(df_filtered):
         if qcr > 30:
@@ -914,7 +914,7 @@ def main():
             spam_comments = df_filtered[df_filtered["is_spam"]]
             spam_examples = spam_comments["comment"].head(3).tolist() if len(spam_comments) > 0 else []
             
-            spam_details = f"""🚨 **Spam Analysis: {spam_rate:.1f}%** of your comments are flagged as spam.
+            spam_details = f"""**Spam Analysis: {spam_rate:.1f}%** of your comments are flagged as spam.
 
 🔍 **Common spam indicators we detect:**
 • Promotional keywords ("subscribe", "check out", "link in bio")
@@ -929,7 +929,7 @@ def main():
 • Encouraging specific, on-topic questions"""
 
             if spam_examples:
-                spam_details += f"\n\n📋 **Sample spam comments:**\n" + "\n".join([f'• "{comment[:80]}..."' for comment in spam_examples])
+                spam_details += f"\n\n **Sample spam comments:**\n" + "\n".join([f'• "{comment[:80]}..."' for comment in spam_examples])
             
             return spam_details
 
@@ -988,7 +988,7 @@ def main():
     st.markdown(
         """
         <div style="text-align: center; padding: 2rem; opacity: 0.7;">
-            <p>🚀 <strong>CommentSense AI Analytics</strong> | Powered by Transformer Models & Advanced NLP</p>
+            <p><strong>CommentSense AI Analytics</strong> | Powered by Transformer Models & Advanced NLP</p>
             <p>Built with ❤️ using Streamlit, HuggingFace Transformers, and Sentence Transformers</p>
         </div>
         """, 
