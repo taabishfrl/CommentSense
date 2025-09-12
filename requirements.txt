@@ -9,3 +9,4 @@ langdetect
 yake
 detoxify
 plotly
+pathlib

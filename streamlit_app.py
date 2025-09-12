@@ -2,6 +2,8 @@
 # -------------------------------------------------------------
 # Run: streamlit run app.py
 
+import base64
+import pathlib
 import re
 from collections import Counter
 from datetime import datetime
@@ -11,89 +13,107 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# ---- AI libs
+# ---- AI libs (all free) ----
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
-from detoxify import Detoxify
 
 
 # =========================
-# Page + minimal styling
+# Utilities: logo in header
+# =========================
+import base64, pathlib, streamlit as st
+
+def logo_data_uri(path="assets/logo.png") -> str:
+    p = pathlib.Path(path)
+    if not p.exists():
+        st.warning(f"Logo not found at {p.resolve()}")
+        return ""
+    return "data:image/" + p.suffix[1:] + ";base64," + base64.b64encode(p.read_bytes()).decode()
+
+LOGO_URI = logo_data_uri() 
+
+# =========================
+# Page + header styling
 # =========================
 st.set_page_config(
     page_title="CommentSense AI Analytics",
-    page_icon="💬",
+    page_icon="logo.png",  # favicon only
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.markdown(
-    """
+st.markdown(f"""
 <style>
-.main-header{font-size:2.2rem;font-weight:800;color:#1f77b4;text-align:center;margin:0.5rem 0 1.2rem}
-.metric-card{background:#f0f2f6;padding:1rem;border-radius:10px;border-left:5px solid #1f77b4}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+/* make header a reliable positioning parent */
+[data-testid="stHeader"] {{
+  position: relative;
+  background:#f8f9fa !important;
+  height:72px;
+}}
+            
+/* center a big logo as a pseudo element */
+[data-testid="stHeader"]::before {{
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;                /* <-- adjust width */
+  height: 56px;                /* <-- adjust height */
+  transform: translate(-50%, -50%);
+  background-image: url("{LOGO_URI}");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: contain;
+  z-index: 5;                  /* below buttons but above bg */
+  pointer-events: none;        /* clicks pass through */
+}}
 
+/* keep toolbar transparent so the logo shows */
+[data-testid="stToolbar"], [data-testid="stToolbarActions"] {{
+  background: transparent !important;
+}}
+
+/* Target the chat input container */
+[data-testid="stChatInput"] {{
+    width: 100%;
+    background: transparent;
+    padding-bottom: 3rem;
+}}
+
+/* Apply padding to the main app container */
+.stMainBlockContainer {{
+    padding-top: 1rem !important;  
+}}
+
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
 # Cached model loaders
 # =========================
 @st.cache_resource
 def load_embedder():
-    # Multilingual alternative: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # Multilingual option: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 
 @st.cache_resource
 def load_sentiment():
-    # Multilingual alternative: "nlptown/bert-base-multilingual-uncased-sentiment"
+    # Multilingual option: "nlptown/bert-base-multilingual-uncased-sentiment"
     return pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
 
 
 @st.cache_resource
 def load_zero_shot():
-    # If memory tight, you can switch to "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+    # Lighter multilingual: "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
     return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
 
 @st.cache_resource
 def load_toxicity():
-    try:
-        # First try loading the original model
-        return Detoxify("original")
-    except Exception as e:
-        st.warning("⚠️ Could not load toxicity model. Using simplified toxicity detection.")
-        # Fallback to a simple keyword-based approach
-        return SimpleToxicityDetector()
-
-
-# Add this class above the CommentAnalyzer class
-class SimpleToxicityDetector:
-    def __init__(self):
-        self.toxic_patterns = [
-            r'\b(hate|idiot|stupid|dumb|moron|fool)\b',
-            r'\b(fuck|shit|damn|crap|ass)\b',
-            r'\b(kill|die|death|murder)\b',
-            r'\b(racist|sexist|bigot)\b'
-        ]
-        
-    def predict(self, texts):
-        if isinstance(texts, str):
-            texts = [texts]
-            
-        scores = []
-        for text in texts:
-            text = text.lower()
-            # Count matches of toxic patterns
-            matches = sum(bool(re.search(pattern, text)) for pattern in self.toxic_patterns)
-            # Convert to a score between 0 and 1
-            score = min(1.0, matches / len(self.toxic_patterns))
-            scores.append(score)
-            
-        return {"toxicity": np.array(scores)}
+    # Free toxicity classifier (no Detoxify/Torch-hub checkpoints)
+    # We request all scores so we can extract the "toxic" probability.
+    return pipeline("text-classification", model="unitary/toxic-bert", truncation=True)
 
 
 # =========================
@@ -104,9 +124,9 @@ class CommentAnalyzer:
         self.embedder = load_embedder()
         self.sentiment_pipe = load_sentiment()
         self.zs_pipe = load_zero_shot()
-        self.tox = load_toxicity()
+        self.tox_pipe = load_toxicity()
 
-        # Lightweight bonuses/penalties (you can tweak)
+        # Lightweight bonuses/penalties
         self.quality_keywords = {
             "high_quality": [
                 "insightful",
@@ -146,10 +166,14 @@ class CommentAnalyzer:
             return "Neutral"
 
     def detect_toxicity(self, comment: str) -> float:
+        """Return probability the comment is toxic (0..1) via HF pipeline."""
         try:
-            return float(self.tox.predict([str(comment)])["toxicity"][0])  # 0..1
-        except Exception as e:
-            st.warning(f"Toxicity detection error: {str(e)}")
+            out = self.tox_pipe(str(comment), return_all_scores=True)[0]
+            for item in out:
+                if item["label"].lower() == "toxic":
+                    return float(item["score"])
+            return 0.0
+        except Exception:
             return 0.0
 
     def zero_shot_categories(self, comment: str):
@@ -233,7 +257,6 @@ def load_sample_data():
 # App
 # =========================
 def main():
-    st.markdown('<div class="main-header">CommentSense — Quality Engagement Analytics</div>', unsafe_allow_html=True)
     st.markdown("AI-powered analysis of **relevance, sentiment, toxicity, spam** and a **quality-weighted SoE** metric.")
 
     analyzer = CommentAnalyzer()
@@ -263,11 +286,10 @@ def main():
             post_text_col = c
             break
     if post_text_col is None:
-        # Create default post_text column more safely
         if "video_id" in df.columns:
             df[post_text_col := "post_text"] = df["video_id"].astype(str)
         else:
-            df[post_text_col := "post_text"] = ""  # Empty string as fallback
+            df[post_text_col := "post_text"] = ""  # fallback
 
     # ---------- AI analysis ----------
     with st.spinner("Analyzing with free AI models…"):
@@ -364,7 +386,7 @@ def main():
         missing = [c for c in show_cols if c not in df_filtered.columns]
         for m in missing:
             df_filtered[m] = np.nan
-        st.dataframe(df_filtered[show_cols].reset_index(drop=True), use_container_width=True, height=400)
+        st.dataframe(df_filtered[show_cols].reset_index(drop=True), use_container_width=True, height=500)
 
     # ---------- Export ----------
     colDL, _ = st.columns([1, 3])
@@ -387,10 +409,8 @@ def main():
             insights.append("High QCR — your content is sparking meaningful, on-topic discussion.")
         elif qcr < 15:
             insights.append("Low QCR — try clearer CTAs or more specific captions to prompt constructive replies.")
-
         if spam > 20:
             insights.append("Spam is elevated — many short/promo/duplicate comments. Consider moderation rules or blocking promo keywords.")
-
         pos = (df_filtered["sentiment"] == "Positive").mean() * 100
         if pos > 60:
             insights.append("Audience sentiment is strongly positive — consider scaling this content theme.")
@@ -409,7 +429,6 @@ def main():
             }
         ]
 
-    # render history
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
@@ -476,7 +495,6 @@ def main():
         st.session_state.messages.append({"role": "assistant", "content": reply})
         with st.chat_message("assistant"):
             st.markdown(reply)
-
 
 # ---- run
 if __name__ == "__main__":
