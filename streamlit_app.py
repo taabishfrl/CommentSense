@@ -30,6 +30,20 @@ def logo_data_uri(path="assets/logo.png") -> str:
 LOGO_URI = logo_data_uri() 
 
 # =========================
+# Utilities: logo in header
+# =========================
+import base64, pathlib, streamlit as st
+
+def logo_data_uri(path="assets/logo.png") -> str:
+    p = pathlib.Path(path)
+    if not p.exists():
+        st.warning(f"Logo not found at {p.resolve()}")
+        return ""
+    return "data:image/" + p.suffix[1:] + ";base64," + base64.b64encode(p.read_bytes()).decode()
+
+LOGO_URI = logo_data_uri() 
+
+# =========================
 # Page + header styling
 # =========================
 st.set_page_config(
