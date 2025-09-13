@@ -85,20 +85,19 @@ st.markdown(f"""
     background: white !important;
     backdrop-filter: blur(20px) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
-    height: 72px;
+    height: 100px;
 }}
 [data-testid="stHeader"]::before {{
     content: "";
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 200px;
-    height: 56px;
-    transform: translate(-50%, -50%);
+    top: 0;
+    left: 0;
+    width: 100%;      /* fill header width */
+    height: 100%;     /* fill header height */
     background-image: url("{LOGO_URI}");
     background-repeat: no-repeat;
-    background-position: center;
-    background-size: contain;
+    background-position: center center;
+    background-size: contain;   /* keeps aspect ratio */
     z-index: 5;
     pointer-events: none;
 }}
@@ -403,10 +402,12 @@ def main():
         else:
             df[post_text_col := "post_text"] = ""
 
-    # ---------- AI Analysis with progress ----------
-    progress_container = st.empty()
-    with progress_container.container():
-        st.markdown("### AI Analysis in Progress...")
+    # ---------- AI Analysis with progress (in a card) ----------
+    card_progress = st.empty()  # use st.empty so we can fully clear later
+    with card_progress.container():
+        st.markdown('<div class="cs-card-marker"></div>', unsafe_allow_html=True)
+
+        st.markdown("### AI Analysis in Progress…")
         progress_bar = st.progress(0)
         status_text = st.empty()
 
@@ -429,8 +430,11 @@ def main():
 
         df["quality_score"] = df.apply(lambda r: analyzer.quality_score(r["comment"], r[post_text_col]), axis=1)
         progress_bar.progress(100)
+
         status_text.text("✅ Analysis complete!")
-    progress_container.empty()
+
+    # fully clear the entire card (so it disappears)
+    card_progress.empty()
 
     # ---------- Labels ----------
     df["quality_category"] = pd.cut(df["quality_score"], bins=[-1,0.4,0.7,1.0], labels=["Low","Medium","High"])
