@@ -46,14 +46,14 @@ st.markdown(f"""
 <style>
 
 /* Import Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 /* Animated gradient background */
 .stApp {{
     background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c, #4facfe, #00f2fe);
     background-size: 400% 400%;
     animation: gradientBG 15s ease infinite;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Poppins', sans-serif !important;
 }}
 @keyframes gradientBG {{
     0% {{ background-position: 0% 50%; }}
