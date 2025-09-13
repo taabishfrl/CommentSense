@@ -106,7 +106,7 @@ st.markdown(f"""
 
 /* ---- MAIN WRAPPER: make transparent, let CARDS provide glass look ---- */
 .block-container {{
-  max-width: 1100px !important;
+  width: 70%;
   margin: 1.25rem auto !important;
   padding: 0 1rem !important;
   background: transparent !important;
@@ -122,7 +122,6 @@ st.markdown(f"""
 /* Text styling (for dark background zones) */
 .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{
   color: white !important;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
   font-weight: 600 !important;
 }}
 .stMarkdown h4 {{ color: black !important; font-weight: 600 !important; }}
