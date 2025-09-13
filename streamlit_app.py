@@ -18,6 +18,17 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
 
+# =========================
+# Utilities: logo in header
+# =========================
+def logo_data_uri(path="assets/logo.png") -> str:
+    p = pathlib.Path(path)
+    if not p.exists():
+        st.warning(f"Logo not found at {p.resolve()}")
+        return ""
+    return "data:image/" + p.suffix[1:] + ";base64," + base64.b64encode(p.read_bytes()).decode()
+
+LOGO_URI = logo_data_uri() 
 
 # =========================
 # Utilities: logo in header
@@ -339,6 +350,77 @@ def load_toxicity():
     return pipeline("text-classification", model="unitary/toxic-bert", truncation=True)
 
 # =========================
+# Data Loading & Auto-Detection Functions
+# =========================
+def detect_comment_column(df):
+    """Automatically detect the comment/text column"""
+    # Priority list of possible comment column names
+    comment_priority = [
+        'comment', 'text', 'textOriginal', 'content', 'message', 
+        'body', 'review', 'feedback', 'comment_text', 'comment_body',
+        'user_comment', 'comment_message', 'post_comment', 'comment_content',
+        'review_text', 'feedback_text', 'commentary', 'response'
+    ]
+    
+    # Check for exact matches first
+    for col in comment_priority:
+        if col in df.columns:
+            return col
+    
+    # Check for partial matches (case insensitive)
+    for col in df.columns:
+        col_lower = col.lower()
+        if any(keyword in col_lower for keyword in ['comment', 'text', 'content', 'message', 'review', 'feedback', 'body']):
+            return col
+    
+    # If no obvious match, return the first string column
+    for col in df.columns:
+        if pd.api.types.is_string_dtype(df[col]):
+            return col
+    
+    # Last resort: return the first column
+    return df.columns[0] if len(df.columns) > 0 else None
+
+def detect_numeric_column(df, preferred_names):
+    """Detect numeric columns with preferred names"""
+    for col in preferred_names:
+        if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
+            return col
+    
+    # Find any numeric column
+    for col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            return col
+    
+    return None
+
+def detect_date_column(df):
+    """Detect date/time columns"""
+    date_keywords = ['date', 'time', 'timestamp', 'created', 'published', 'posted', 'datetime']
+    
+    for col in date_keywords:
+        if col in df.columns:
+            return col
+    
+    for col in df.columns:
+        col_lower = col.lower()
+        if any(keyword in col_lower for keyword in date_keywords):
+            return col
+    
+    # Try to auto-detect datetime columns
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            return col
+        try:
+            # Try to convert to datetime
+            pd.to_datetime(df[col].head(10))  # Test with first 10 rows
+            return col
+        except:
+            continue
+    
+    return None
+
+# =========================
 # CommentAnalyzer
 # =========================
 class CommentAnalyzer:
@@ -472,26 +554,108 @@ def main():
     uploaded_file = st.sidebar.file_uploader(
         "Upload comments CSV/XLSX", type=["csv","xlsx"], help="Upload your comment data for analysis"
     )
-
+    
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
-            st.sidebar.success("File uploaded successfully!")
+            
+            # Auto-detect columns for universal compatibility
+            comment_col = detect_comment_column(df)
+            like_col = detect_numeric_column(df, ['likes', 'likeCount', 'favorites', 'engagement', 'score', 'upvotes'])
+            date_col = detect_date_column(df)
+            id_col = None
+            
+            # Try to find an ID column
+            for col in df.columns:
+                col_lower = col.lower()
+                if any(keyword in col_lower for keyword in ['id', 'video', 'post', 'item', 'product']):
+                    id_col = col
+                    break
+            
+            if id_col is None and len(df.columns) > 1:
+                id_col = df.columns[0]  # Use first column as ID if none found
+            
+            # Rename columns for internal consistency
+            column_mapping = {}
+            if comment_col:
+                df = df.rename(columns={comment_col: 'comment'})
+                column_mapping[comment_col] = 'comment'
+                st.sidebar.success(f"✅ Using '{comment_col}' as comment column")
+            
+            if like_col:
+                df = df.rename(columns={like_col: 'likes'})
+                column_mapping[like_col] = 'likes'
+                st.sidebar.success(f"✅ Using '{like_col}' as likes column")
+            else:
+                df['likes'] = 0  # Default value
+                st.sidebar.info("ℹ️ No likes column found. Using default value (0).")
+            
+            if date_col:
+                df = df.rename(columns={date_col: 'timestamp'})
+                column_mapping[date_col] = 'timestamp'
+                # Convert to datetime if it's a string
+                if df['timestamp'].dtype == 'object':
+                    try:
+                        df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    except:
+                        df['timestamp'] = pd.Timestamp.now()
+                st.sidebar.success(f"✅ Using '{date_col}' as timestamp column")
+            else:
+                df['timestamp'] = pd.Timestamp.now()  # Default value
+                st.sidebar.info("ℹ️ No timestamp column found. Using current time.")
+            
+            if id_col:
+                df = df.rename(columns={id_col: 'video_id'})
+                column_mapping[id_col] = 'video_id'
+                st.sidebar.success(f"✅ Using '{id_col}' as video ID column")
+            else:
+                df['video_id'] = 'Item_' + df.index.astype(str)  # Generate IDs
+                st.sidebar.info("ℹ️ No ID column found. Generating automatic IDs.")
+            
+            # Show data preview
+            st.sidebar.subheader("📋 Data Preview")
+            st.sidebar.write(f"Rows: {len(df)}, Columns: {len(df.columns)}")
+            
+            if st.sidebar.checkbox("Show first 3 rows"):
+                st.sidebar.dataframe(df.head(3))
+                
         except Exception as e:
-            st.sidebar.error(f"Error loading file: {e}")
+            st.error(f"Error loading file: {e}")
+            st.info("Falling back to sample data for demonstration.")
             df = load_sample_data()
     else:
-        st.sidebar.info("No file uploaded. Using sample data for demo.")
+        st.info("📝 No file uploaded. Using sample data for demonstration.")
         df = load_sample_data()
 
-    # ---------- Guard: required column ----------
-    if "comment" not in df.columns:
-        st.error("Dataset must contain a 'comment' column.")
-        st.stop()
+    # Let user manually override column mapping if needed
+    st.sidebar.subheader("🛠️ Manual Column Mapping (Optional)")
+    
+    all_columns = df.columns.tolist()
+    current_comment_col = 'comment' if 'comment' in df.columns else all_columns[0] if all_columns else None
+    
+    if all_columns:
+        manual_comment_col = st.sidebar.selectbox(
+            "Select comment/text column", 
+            options=all_columns,
+            index=all_columns.index(current_comment_col) if current_comment_col in all_columns else 0
+        )
+        
+        # Update if user selected a different column
+        if manual_comment_col != current_comment_col and manual_comment_col != 'comment':
+            df = df.rename(columns={manual_comment_col: 'comment'})
+            st.sidebar.info(f"Using '{manual_comment_col}' as comment column")
+
+    # Ensure we have the required comment column
+    if 'comment' not in df.columns:
+        st.error("Could not identify a text column in your data.")
+        st.info("Please ensure your CSV contains at least one column with text content.")
+        return
 
     # ---------- Pick/prepare post_text column ----------
     post_text_col = None
-    for c in ["caption","title","video_caption","post_text","text"]:
+
+    for c in ["caption", "title", "video_caption", "post_text", "text", "description"]:
+
         if c in df.columns:
             post_text_col = c
             break
