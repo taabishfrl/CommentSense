@@ -327,6 +327,16 @@ hr {{ border: none !important; height: 1px !important;
   transform: translateY(0) scale(0.98) !important;
 }}
 
+/* Video title line */
+.cs-video-title {{
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 1.1rem !important;
+  color: #1b1b1b !important;
+  margin: .25rem 0 .75rem 0 !important;
+  text-align: center !important;
+}}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -713,6 +723,21 @@ def main():
     quality_sel = st.sidebar.multiselect("⭐ Quality Level", ["High","Medium","Low"],
                                          default=["High","Medium","Low"])
     df_filtered = df[df["quality_category"].isin(quality_sel)]
+
+    # ---- Video title display (from filtered data) ----
+    if "title" in df_filtered.columns and not df_filtered["title"].dropna().empty:
+        # If multiple videos are selected, show the most common title + a count hint
+        unique_titles = df_filtered["title"].dropna().astype(str).unique().tolist()
+        if len(unique_titles) == 1:
+            title_to_show = unique_titles[0]
+            subtitle = f"🎬 {title_to_show}"
+        else:
+            mode_title = df_filtered["title"].mode()[0]
+            subtitle = f"🎬 {mode_title} (+{len(unique_titles)-1} more)"
+    else:
+        subtitle = "🎬 (unknown)"
+
+    st.markdown(f'<div class="cs-video-title">{subtitle}</div>', unsafe_allow_html=True)
 
     # ------------------ BLOCK 1: Title + KPIs (card) ------------------
     card1 = st.container()
