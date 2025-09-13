@@ -85,7 +85,7 @@ st.markdown(f"""
   position: relative;
   background: white !important;
   backdrop-filter: blur(20px) !important;
-  height: 120px;                 /* tweak height as desired */
+  height: 90px;                 /* tweak height as desired */
 }}
 
 /* Fill the header and center the image */
@@ -96,7 +96,7 @@ st.markdown(f"""
   background-image: url("{LOGO_URI}");  /* <-- single braces */
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: auto 50px; 
+  background-size: auto 30px; 
   z-index: 5;
   pointer-events: none;
 }}
@@ -105,7 +105,7 @@ st.markdown(f"""
 
 /* ---- MAIN WRAPPER: make transparent, let CARDS provide glass look ---- */
 .block-container {{
-  width: 70%;
+  width: 80%;
   margin: 1.25rem auto !important;
   padding: 0 1rem !important;
   background: transparent !important;
@@ -125,10 +125,6 @@ st.markdown(f"""
 }}
 .stMarkdown h4 {{ color: black !important; font-weight: 600 !important; }}
 .stMarkdown h1 {{ font-size: 2.5rem !important; animation: titlePulse 2s ease-in-out infinite alternate; }}
-@keyframes titlePulse {{
-  from {{ text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }}
-  to   {{ text-shadow: 2px 2px 20px rgba(255,255,255,0.6); }}
-}}
 .stMarkdown p {{ color: rgba(255,255,255,0.9) !important; }}
 
 /* Metrics */
@@ -158,15 +154,74 @@ st.markdown(f"""
   background: rgba(255,255,255,0.1) !important; backdrop-filter: blur(10px) !important;
   border: 2px dashed rgba(255,255,255,.3) !important; border-radius: 15px !important;
 }}
-.stTabs [data-baseweb="tab-list"] {{
-  gap: 2px; background: rgba(255,255,255,0.1) !important; backdrop-filter: blur(10px) !important;
-  border-radius: 25px !important; padding: 4px !important;
+
+/* ——— Plotly modebar: solid neutral buttons ——— */
+.js-plotly-plot .modebar,
+.js-plotly-plot .modebar-group {{
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }}
-.stTabs [data-baseweb="tab"] {{
-  background: transparent !important; color: white !important; border-radius: 20px !important;
-  padding: 8px 16px !important; transition: all .3s ease !important;
+
+.js-plotly-plot .modebar .modebar-btn {{
+  background: #e0e0e0 !important;   /* light grey base */
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  padding: 2px !important;
+  margin: 0 2px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: none !important;
+  line-height: 0 !important;
 }}
-.stTabs [aria-selected="true"] {{ background: linear-gradient(45deg,#667eea,#764ba2) !important; box-shadow: 0 4px 15px rgba(102,126,234,.4) !important; }}
+
+/* hover effect = darker grey */
+.js-plotly-plot .modebar .modebar-btn:hover,
+.js-plotly-plot .modebar .modebar-btn:focus {{
+  background: #d0d0d0 !important;
+  border-color: #bbb !important;
+}}
+
+/* icons = dark grey */
+.js-plotly-plot .modebar .modebar-btn svg {{
+  fill: transparent !important;
+}}
+.js-plotly-plot .modebar .modebar-btn:hover svg {{
+  fill: #000 !important;
+}}
+
+/* Tab rail */
+.stTabs [data-baseweb="tab-list"]{{
+  gap: 8px;
+  background: rgba(255,255,255,0.1) !important;
+  backdrop-filter: blur(10px) !important;
+  border-radius: 25px !important;
+  padding: 6px !important;
+}}
+
+/* Unselected tab */
+.stTabs [role="tab"]{{
+  background: transparent !important;
+  border-radius: 20px !important;
+  padding: 8px 18px !important;
+  color: #1b1b1b !important;        /* black when not selected */
+  transition: all .25s ease !important;
+}}
+
+/* Selected tab */
+.stTabs [role="tab"][aria-selected="true"]{{
+  background: linear-gradient(45deg,#667eea,#764ba2) !important;
+  box-shadow: 0 4px 15px rgba(102,126,234,.35) !important;
+  color: #ffffff !important;        /* makes the tab element white */
+}}
+
+/* Make sure any nested label elements also turn white */
+.stTabs [role="tab"][aria-selected="true"] *{{
+  color: #ffffff !important;
+  fill: #ffffff !important;         /* covers SVG icons if any */
+}}
 
 .stSelectbox > div > div, .stMultiSelect > div > div {{
   background: rgba(255,255,255,0.1) !important; backdrop-filter: blur(10px) !important;
@@ -217,6 +272,50 @@ hr {{ border: none !important; height: 1px !important;
 [data-testid="stVerticalBlock"]:has(.cs-card-marker) [data-testid="metric-container"] {{
   background: rgba(255,255,255,0.55) !important; border: 1px solid rgba(0,0,0,0.06) !important;
 }}
+
+/* Scope to the Streamlit block that contains our csv-btn-marker */
+[data-testid="stVerticalBlock"]:has(.csv-btn-marker) button {{
+  /* base look */
+  background: linear-gradient(45deg, #667eea, #764ba2) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 26px !important;
+  padding: 10px 20px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 6px 18px rgba(102,126,234,0.35) !important;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease !important;
+}}
+
+/* Hover = “save/ready” feel (green) */
+[data-testid="stVerticalBlock"]:has(.csv-btn-marker) button:hover {{
+  background: linear-gradient(45deg, #22c55e, #16a34a) !important; /* green */
+  box-shadow: 0 8px 22px rgba(34,197,94,0.35) !important;
+  transform: translateY(-1px) !important;
+}}
+
+/* Pressed/active */
+[data-testid="stVerticalBlock"]:has(.csv-btn-marker) button:active {{
+  transform: translateY(0) scale(0.98) !important;
+  box-shadow: 0 3px 10px rgba(34,197,94,0.25) !important;
+}}
+
+/* Also style the download button (same block) */
+[data-testid="stVerticalBlock"]:has(.csv-btn-marker) [data-testid="stDownloadButton"] button {{
+  background: linear-gradient(45deg, #4f46e5, #7c3aed) !important;
+  color: #fff !important;
+  border-radius: 26px !important;
+  border: none !important;
+  font-weight: 600 !important;
+}}
+[data-testid="stVerticalBlock"]:has(.csv-btn-marker) [data-testid="stDownloadButton"] button:hover {{
+  background: linear-gradient(45deg, #22c55e, #16a34a) !important;
+  box-shadow: 0 8px 22px rgba(34,197,94,0.35) !important;
+  transform: translateY(-1px) !important;
+}}
+[data-testid="stVerticalBlock"]:has(.csv-btn-marker) [data-testid="stDownloadButton"] button:active {{
+  transform: translateY(0) scale(0.98) !important;
+}}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -556,9 +655,13 @@ def main():
         st.markdown("### Export Results")
         colDL, colInfo = st.columns([1,2])
         with colDL:
-            if st.button("Prepare CSV Download", type="primary"):
+            # --- marker so our CSS can target ONLY this area ---
+            st.markdown('<span class="csv-btn-marker"></span>', unsafe_allow_html=True)
+
+            if st.button("Prepare CSV Download", type="primary", key="prep_csv"):
                 st.session_state._csv = df.to_csv(index=False)
                 st.success("CSV prepared successfully!")
+
             if "_csv" in st.session_state:
                 st.download_button(
                     "Download Analysis CSV",
@@ -566,6 +669,7 @@ def main():
                     file_name=f"comment_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     type="secondary",
+                    key="dl_csv",
                 )
         with colInfo:
             st.info(" **Export includes:** All original data plus AI analysis results (sentiment, toxicity, relevance, categories, quality scores)")
