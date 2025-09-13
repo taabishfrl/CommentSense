@@ -44,6 +44,7 @@ st.set_page_config(
 # Enhanced CSS with modern animations and glassmorphism
 st.markdown(f"""
 <style>
+
 /* Import Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -79,28 +80,27 @@ st.markdown(f"""
     50% {{ transform: translateY(-20px) rotate(180deg); }}
 }}
 
-/* Header styling */
+/* Header styling — centered background logo */
 [data-testid="stHeader"] {{
-    position: relative;
-    background: white !important;
-    backdrop-filter: blur(20px) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
-    height: 100px;
+  position: relative;
+  background: white !important;
+  backdrop-filter: blur(20px) !important;
+  height: 120px;                 /* tweak height as desired */
 }}
+
+/* Fill the header and center the image */
 [data-testid="stHeader"]::before {{
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;      /* fill header width */
-    height: 100%;     /* fill header height */
-    background-image: url("{LOGO_URI}");
-    background-repeat: no-repeat;
-    background-position: center center;
-    background-size: contain;   /* keeps aspect ratio */
-    z-index: 5;
-    pointer-events: none;
+  content: "";
+  position: absolute;
+  inset: 0;                      /* fill the header */
+  background-image: url("{LOGO_URI}");  /* <-- single braces */
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: auto 50px; 
+  z-index: 5;
+  pointer-events: none;
 }}
+
 [data-testid="stSidebarContent"] {{ background: white; }}
 
 /* ---- MAIN WRAPPER: make transparent, let CARDS provide glass look ---- */
