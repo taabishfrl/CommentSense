@@ -1,9 +1,7 @@
 @@ -1,19 +0,0 @@
-# 🎫 Support tickets template
+# 🖥️ CommentSense AI Analytics
 
-A simple Streamlit app showing an internal tool that lets you create, manage, and visualize support tickets. 
-
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://support-tickets-template.streamlit.app/)
+A simple Streamlit app showing a detailed comment analysis of L'OREAL beauty and makeup videos. 
 
 ### How to run it on your own machine
 
