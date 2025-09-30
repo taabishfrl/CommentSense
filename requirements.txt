@@ -1,12 +1,8 @@
 streamlit
 pandas
 numpy
-scikit-learn
-torch
-transformers
-sentence-transformers
-langdetect
-yake
-detoxify
 plotly
-pathlib
+sentence-transformers
+transformers
+scikit-learn
+wordcloud
