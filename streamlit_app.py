@@ -437,7 +437,7 @@ def load_sample_data():
         "likes": np.random.randint(0, 50, len(sample_comments)),
         "shares": np.random.randint(0, 10, len(sample_comments)),
         "saves": np.random.randint(0, 10, len(sample_comments)),
-        "timestamp": pd.date_range("2024-01-01", periods=len(sample_comments), freq="H"),
+        "timestamp": pd.date_range("2024-01-01", periods=len(sample_comments), freq="h"),
     })
     df["title"] = df["video_id"].map(titles)
     return df
